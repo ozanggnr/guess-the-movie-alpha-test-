@@ -1,11 +1,9 @@
-[build]
-  builder = "DOCKERFILE"
-
 [[services]]
   name = "server"
   source = "server"
 
   [services.build]
+    builder = "DOCKERFILE"
     dockerfilePath = "Dockerfile"
 
   [services.deploy]
@@ -22,6 +20,7 @@
   source = "client"
 
   [services.build]
+    builder = "DOCKERFILE"
     dockerfilePath = "Dockerfile"
 
   [services.deploy]
