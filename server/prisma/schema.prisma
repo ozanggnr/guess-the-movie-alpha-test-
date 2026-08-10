@@ -1,0 +1,102 @@
+// This is your Prisma schema file.
+// Learn more at: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum GameStatus {
+  ACTIVE
+  WON
+  LOST
+}
+
+enum RoundResult {
+  CORRECT
+  INCORRECT
+  SKIPPED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+/// A movie stored in the database, including its trailer metadata.
+model Movie {
+  id                  String   @id @default(cuid())
+  imdbId              String?  @unique
+  title               String
+  originalTitle       String?
+  year                Int
+  overview            String?
+  posterUrl           String?
+  genres              String[]
+  trailerYoutubeId    String?  @unique
+  trailerTitle        String?
+  trailerChannel      String?
+  trailerDuration     Int?     // seconds
+  isTrailerAvailable  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  games               Game[]
+
+  @@index([imdbId])
+  @@index([year])
+  @@index([isTrailerAvailable])
+}
+
+/// A single playthrough of the guessing game for a specific movie.
+model Game {
+  id           String     @id @default(cuid())
+  movieId      String
+  movie        Movie      @relation(fields: [movieId], references: [id])
+  currentRound Int        @default(1)
+  status       GameStatus @default(ACTIVE)
+  score        Int?
+  startedAt    DateTime   @default(now())
+  expiresAt    DateTime   // abandoned games expire after this timestamp
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  rounds       Round[]
+
+  @@index([movieId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+/// One round of guessing within a Game.
+model Round {
+  id              String      @id @default(cuid())
+  gameId          String
+  game            Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  roundNumber     Int         // 1-4
+  durationSeconds Int         // 1, 3, 5, 10
+  guess           String?
+  result          RoundResult?
+  guessedAt       DateTime?
+  createdAt       DateTime    @default(now())
+
+  @@unique([gameId, roundNumber])
+  @@index([gameId])
+}
+
+/// User account — reserved for Phase 3 (Authentication).
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([username])
+}

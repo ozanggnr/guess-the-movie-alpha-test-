@@ -1,0 +1,29 @@
+[build]
+  builder = "DOCKERFILE"
+
+[[services]]
+  name = "server"
+  source = "server"
+
+  [services.build]
+    dockerfilePath = "Dockerfile"
+
+  [services.deploy]
+    startCommand = "node dist/server.js"
+    restartPolicyType = "ON_FAILURE"
+    restartPolicyMaxRetries = 3
+
+  [[services.variables]]
+    name = "NODE_ENV"
+    value = "production"
+
+[[services]]
+  name = "client"
+  source = "client"
+
+  [services.build]
+    dockerfilePath = "Dockerfile"
+
+  [services.deploy]
+    restartPolicyType = "ON_FAILURE"
+    restartPolicyMaxRetries = 3
