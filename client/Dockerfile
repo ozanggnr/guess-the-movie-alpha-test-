@@ -3,11 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 RUN npm install --include=dev
 
-# Copy source
 COPY . .
 
 # Build args (Railway injects these at build time)
@@ -21,14 +19,9 @@ FROM nginx:alpine AS runner
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-RUN echo 'server { \
-  listen ${PORT}; \
-  root /usr/share/nginx/html; \
-  index index.html; \
-  location / { \
-    try_files $uri $uri/ /index.html; \
-  } \
-}' > /etc/nginx/conf.d/default.conf.template
+# Copy our nginx config template (uses __PORT__ as placeholder, not $PORT)
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
 
-# Replace only ${PORT} leaving $uri intact, then start Nginx
-CMD sh -c "export PORT=\${PORT:-80} && envsubst '\${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+# At runtime: replace __PORT__ with the real PORT Railway injects, then start nginx
+CMD sh -c "sed s/__PORT__/${PORT:-80}/ /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+
