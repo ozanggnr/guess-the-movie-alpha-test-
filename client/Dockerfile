@@ -23,19 +23,19 @@ FROM nginx:alpine AS runner
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Nginx config for SPA routing (React Router)
-RUN echo 'server { \
-  listen 80; \
-  root /usr/share/nginx/html; \
-  index index.html; \
-  location / { \
-    try_files $uri $uri/ /index.html; \
-  } \
-  location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ { \
-    expires 1y; \
-    add_header Cache-Control "public, immutable"; \
-  } \
-}' > /etc/nginx/conf.d/default.conf
+RUN rm /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-CMD /bin/sh -c "sed -i -e \"s/listen 80;/listen \\${PORT:-80};/g\" /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+CMD echo "server { \
+  listen ${PORT:-80}; \
+  root /usr/share/nginx/html; \
+  index index.html; \
+  location / { \
+    try_files \$uri \$uri/ /index.html; \
+  } \
+  location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)\$ { \
+    expires 1y; \
+    add_header Cache-Control \"public, immutable\"; \
+  } \
+}" > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'
