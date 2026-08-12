@@ -179,6 +179,9 @@ export default function HomePage() {
               variant="secondary"
               size="xl"
               className="w-full sm:w-auto"
+              onClick={() =>
+                document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
+              }
             >
               How to Play
             </Button>
@@ -196,7 +199,7 @@ export default function HomePage() {
         </div>
 
         {/* ── How it works ─────────────────────────────────────────────────── */}
-        <section className="w-full mb-20" aria-labelledby="how-it-works-heading">
+        <section id="how-it-works" className="w-full mb-20" aria-labelledby="how-it-works-heading">
           <h2
             id="how-it-works-heading"
             className="text-2xl sm:text-3xl font-bold text-center mb-3 animate-fade-up opacity-0-start"
