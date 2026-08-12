@@ -118,9 +118,11 @@ export function YouTubeTrailerPlayer({
       )}
       style={{ aspectRatio: '16/9' }}
     >
-      {/* YouTube iframe — always rendered so it pre-loads */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div ref={containerRef} className="w-full h-full" />
+      {/* YouTube iframe wrapper — upscaled & cropped so top title bar & bottom YouTube logo are hidden */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
+        <div className="w-[125%] h-[125%] shrink-0 flex items-center justify-center scale-110">
+          <div ref={containerRef} className="w-full h-full" />
+        </div>
       </div>
 
       {/* Black curtain — covers YouTube branding/title when NOT scrubbing */}

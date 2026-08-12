@@ -5,7 +5,7 @@ import { clsx } from 'clsx'
 interface GuessInputProps {
   guess: string
   setGuess: (value: string) => void
-  onSubmit: () => void
+  onSubmit: (directGuess?: string) => void
   isDisabled: boolean
   isLoading: boolean
   autoFocus?: boolean
@@ -89,11 +89,8 @@ export function GuessInput({
     setGuess(title)
     setShowDropdown(false)
     setActiveIndex(-1)
-    // Brief delay then submit
-    setTimeout(() => {
-      setGuess(title)
-      onSubmit()
-    }, 30)
+    // Pass title DIRECTLY to bypass stale React state — state may not update before onSubmit fires
+    onSubmit(title)
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -104,7 +101,7 @@ export function GuessInput({
       if (e.key === 'Escape') { setShowDropdown(false); return }
     }
     if (e.key === 'Enter' && !isDisabled && !isLoading && guess.trim().length > 0) {
-      onSubmit()
+      onSubmit(undefined)
     }
   }
 
@@ -138,7 +135,7 @@ export function GuessInput({
           )}
         />
         <button
-          onClick={onSubmit}
+          onClick={() => onSubmit(undefined)}
           disabled={isSubmitDisabled}
           className={clsx(
             'absolute right-2 top-2 bottom-2 aspect-square flex items-center justify-center rounded-lg transition-all duration-200',

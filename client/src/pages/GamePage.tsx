@@ -77,13 +77,14 @@ export default function GamePage() {
     setHasPlayedCurrentRound(true)
   }
 
-  const submitGuess = async () => {
-    if (!gameState || isSubmitting || !guess.trim()) return
+  const submitGuess = async (directGuess?: string) => {
+    const guessToSubmit = (directGuess ?? guess).trim()
+    if (!gameState || isSubmitting || !guessToSubmit) return
     setIsSubmitting(true)
     setFeedback(null)
 
     try {
-      const res = await gameApi.guess(gameState.gameId, guess)
+      const res = await gameApi.guess(gameState.gameId, guessToSubmit)
       const data = res.data
 
       if (data.correct) {

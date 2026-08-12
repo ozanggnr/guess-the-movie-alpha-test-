@@ -48,8 +48,8 @@ export function GameResult({ status, score, movieTitle, onPlayAgain }: GameResul
         onClick={onPlayAgain}
         className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-black transition-all duration-200 bg-cyan-400 font-pj rounded-xl hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 w-full"
       >
-        <RotateCcw className="w-5 h-5 mr-2 group-hover:-rotate-90 transition-transform duration-300" />
-        Play Again
+        <span>Next Movie</span>
+        <RotateCcw className="w-5 h-5 ml-2 group-hover:rotate-180 transition-transform duration-300" />
       </button>
     </motion.div>
   )
