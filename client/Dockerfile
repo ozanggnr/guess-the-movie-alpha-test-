@@ -25,8 +25,6 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Nginx config for SPA routing (React Router)
 RUN rm /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
-
 CMD echo "server { \
   listen ${PORT:-80}; \
   root /usr/share/nginx/html; \
