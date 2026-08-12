@@ -30,12 +30,7 @@ RUN echo 'server { \
   location / { \
     try_files $uri $uri/ /index.html; \
   } \
-  location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ { \
-    expires 1y; \
-    add_header Cache-Control "public, immutable"; \
-  } \
 }' > /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+# Replace listen 80 with the dynamic PORT assigned by Railway
+CMD sed -i -e "s/listen 80;/listen ${PORT:-80};/g" /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'
