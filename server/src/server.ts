@@ -2,6 +2,7 @@ import app from './app'
 import { env } from './config/env'
 import prisma from './config/database'
 import { expireStaleGames } from './services/game.service'
+import { ensureMoviesSeeded } from './services/seed.service'
 
 // ─── Stale game expiry interval ───────────────────────────────────────────────
 const EXPIRY_INTERVAL_MS = 5 * 60 * 1000 // every 5 minutes
@@ -11,6 +12,9 @@ async function bootstrap(): Promise<void> {
     // Connect to PostgreSQL via Prisma
     await prisma.$connect()
     console.log('[db] Connected to PostgreSQL ✓')
+
+    // Auto-seed database if fewer than 50 movies exist
+    await ensureMoviesSeeded()
 
     // Run expiry cleanup on startup
     const expiredOnStart = await expireStaleGames()
