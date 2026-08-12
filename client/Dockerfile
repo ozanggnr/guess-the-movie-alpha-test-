@@ -19,19 +19,16 @@ RUN npm run build
 # ── Stage 2: Serve ────────────────────────────────────────────────────────────
 FROM nginx:alpine AS runner
 
-# Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Nginx config for SPA routing (React Router)
 RUN echo 'server { \
-  listen 80; \
+  listen ${PORT}; \
   root /usr/share/nginx/html; \
   index index.html; \
   location / { \
     try_files $uri $uri/ /index.html; \
   } \
-}' > /etc/nginx/conf.d/default.conf
+}' > /etc/nginx/conf.d/default.conf.template
 
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+# Replace only ${PORT} leaving $uri intact, then start Nginx
+CMD sh -c "export PORT=\${PORT:-80} && envsubst '\${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
