@@ -10,7 +10,7 @@ interface GameFeedbackProps {
 export function GameFeedback({ type, onClear }: GameFeedbackProps) {
   useEffect(() => {
     if (type === 'wrong' && onClear) {
-      const timer = setTimeout(onClear, 2500)
+      const timer = setTimeout(onClear, 2000)
       return () => clearTimeout(timer)
     }
   }, [type, onClear])
@@ -19,26 +19,20 @@ export function GameFeedback({ type, onClear }: GameFeedbackProps) {
     <AnimatePresence>
       {type && (
         <motion.div
-          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+          initial={{ opacity: 0, y: 6, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.95 }}
-          className="absolute left-0 right-0 -top-16 flex justify-center z-50 pointer-events-none"
+          exit={{ opacity: 0, scale: 0.97 }}
+          className="w-full mb-2"
         >
           <div
-            className={`flex items-center space-x-2 px-4 py-2 rounded-full shadow-lg backdrop-blur-md border ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium ${
               type === 'correct'
-                ? 'bg-green-500/20 border-green-500/50 text-green-400'
-                : 'bg-red-500/20 border-red-500/50 text-red-400'
+                ? 'bg-green-500/15 border-green-500/30 text-green-400'
+                : 'bg-red-500/15 border-red-500/30 text-red-400'
             }`}
           >
-            {type === 'correct' ? (
-              <CheckCircle2 className="w-5 h-5" />
-            ) : (
-              <XCircle className="w-5 h-5" />
-            )}
-            <span className="font-semibold tracking-wide">
-              {type === 'correct' ? 'Correct!' : 'Not quite. Try again.'}
-            </span>
+            {type === 'correct' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <XCircle className="w-4 h-4 shrink-0" />}
+            <span>{type === 'correct' ? '✓ Correct! Well done.' : '✗ Not quite — try again.'}</span>
           </div>
         </motion.div>
       )}

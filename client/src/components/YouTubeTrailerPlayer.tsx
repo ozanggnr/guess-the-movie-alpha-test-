@@ -1,19 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useYouTubePlayer } from '../hooks/useYouTubePlayer'
-import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 interface YouTubeTrailerPlayerProps {
   videoId: string
-  /** The target reveal window in seconds (1, 3, 5, or 10) */
+  /** Reveal window in seconds (1, 3, 5, 10) */
   duration: number
-  /** Full trailer length in seconds — used to compute playback speed */
+  /** Full trailer length in seconds */
   trailerDuration: number | null
   isPlaying: boolean
   onFinished: () => void
   onError: (error: unknown) => void
   className?: string
 }
+
+const SCRUB_INTERVAL_MS = 120 // seek every 120ms — smooth without hammering the API
 
 export function YouTubeTrailerPlayer({
   videoId,
@@ -24,165 +25,152 @@ export function YouTubeTrailerPlayer({
   onError,
   className,
 }: YouTubeTrailerPlayerProps) {
-  const {
-    containerRef,
-    isReady,
-    playerState,
-    error,
-    playVideo,
-    pauseVideo,
-    seekTo,
-    getCurrentTime,
-    setPlaybackRate,
-  } = useYouTubePlayer({
-    videoId,
-    onError,
-  })
+  const { containerRef, isReady, error, playVideo, pauseVideo, seekTo } =
+    useYouTubePlayer({ videoId, onError })
 
-  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0)
-  const [hasStartedCurrentRound, setHasStartedCurrentRound] = useState(false)
-  const rafRef = useRef<number | null>(null)
+  const [wallElapsed, setWallElapsed] = useState(0)
+  const [isActive, setIsActive] = useState(false)
 
-  // Use refs for callbacks to avoid stale closures in RAF loop
-  const latestDuration = useRef(duration)
-  const latestOnFinished = useRef(onFinished)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+  const durationRef = useRef(duration)
+  const trailerDurationRef = useRef(trailerDuration)
+  const onFinishedRef = useRef(onFinished)
 
-  useEffect(() => {
-    latestDuration.current = duration
-    latestOnFinished.current = onFinished
-  }, [duration, onFinished])
+  useEffect(() => { durationRef.current = duration }, [duration])
+  useEffect(() => { trailerDurationRef.current = trailerDuration }, [trailerDuration])
+  useEffect(() => { onFinishedRef.current = onFinished }, [onFinished])
 
-  /**
-   * Compute playback rate so the ENTIRE trailer fits in `duration` seconds.
-   * Clamp between 0.25 and 16 (YouTube IFrame API limits).
-   */
-  const computedRate = trailerDuration && trailerDuration > 0
-    ? Math.min(Math.max(trailerDuration / duration, 0.25), 16)
-    : 1
+  // Speed multiplier for display only (actual scrubbing handles the seek)
+  const speedMult = trailerDuration && trailerDuration > 0
+    ? (trailerDuration / duration).toFixed(1)
+    : '1.0'
 
-  // Apply playback rate whenever rate or readiness changes
-  useEffect(() => {
-    if (!isReady) return
-    setPlaybackRate(computedRate)
-  }, [isReady, computedRate, setPlaybackRate])
+  const stopScrubbing = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    startTimeRef.current = null
+    setIsActive(false)
+  }, [])
 
-  // Precision timing loop — tracks real elapsed time (wall-clock seconds)
-  // regardless of the playback rate set on the YouTube player.
-  useEffect(() => {
-    if (!isReady) return
+  const startScrubbing = useCallback(() => {
+    stopScrubbing()
 
-    const tick = () => {
-      const currentTime = getCurrentTime()
-      // Wall-clock time elapsed = video position / playback rate
-      const wallClockElapsed = currentTime / computedRate
-      setCurrentPlaybackTime(wallClockElapsed)
+    // Seek to beginning and start playing
+    seekTo(0, true)
+    playVideo()
 
-      if (wallClockElapsed >= latestDuration.current) {
+    startTimeRef.current = Date.now()
+    setWallElapsed(0)
+    setIsActive(true)
+
+    intervalRef.current = setInterval(() => {
+      if (!startTimeRef.current) return
+
+      const elapsed = (Date.now() - startTimeRef.current) / 1000
+      setWallElapsed(elapsed)
+
+      const totalDuration = durationRef.current
+      const trailer = trailerDurationRef.current
+
+      if (elapsed >= totalDuration) {
+        stopScrubbing()
         pauseVideo()
-        latestOnFinished.current()
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        onFinishedRef.current()
         return
       }
 
-      rafRef.current = requestAnimationFrame(tick)
-    }
+      // Where in the video we should be right now
+      const targetVideoPos = trailer && trailer > 0
+        ? (elapsed / totalDuration) * trailer
+        : elapsed
 
-    if (isPlaying && playerState === 'PLAYING') {
-      rafRef.current = requestAnimationFrame(tick)
-    } else {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
+      seekTo(targetVideoPos, true)
+    }, SCRUB_INTERVAL_MS)
+  }, [seekTo, playVideo, pauseVideo, stopScrubbing])
 
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  }, [isPlaying, playerState, isReady, getCurrentTime, pauseVideo, computedRate])
-
-  // Handle play/pause commands from parent
+  // React to isPlaying changes
   useEffect(() => {
     if (!isReady) return
 
     if (isPlaying) {
-      if (!hasStartedCurrentRound) {
-        seekTo(0, true)
-        setHasStartedCurrentRound(true)
-        // Re-apply rate after seek (some browsers reset it)
-        setPlaybackRate(computedRate)
-      }
-      playVideo()
+      startScrubbing()
     } else {
+      stopScrubbing()
       pauseVideo()
-      setHasStartedCurrentRound(false)
+      setWallElapsed(0)
     }
-  }, [isPlaying, isReady, playVideo, pauseVideo, seekTo, hasStartedCurrentRound, computedRate, setPlaybackRate])
 
-  const showLoading = !isReady || (isPlaying && playerState === 'BUFFERING')
-  const showRevealProgress = isPlaying && playerState === 'PLAYING'
-  const progressPercent = Math.min((currentPlaybackTime / duration) * 100, 100)
-  const speedLabel = computedRate > 1 ? `${computedRate.toFixed(1)}×` : null
+    return () => stopScrubbing()
+  }, [isPlaying, isReady]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const progressPercent = Math.min((wallElapsed / duration) * 100, 100)
+  const showLoading = !isReady && !error
+  const showCurtain = !isActive || !isReady // hide YouTube UI when not scrubbing
 
   return (
     <div
       className={twMerge(
-        'relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-white/10 shadow-2xl',
+        'relative w-full bg-black rounded-xl overflow-hidden border border-white/10 shadow-2xl',
         className
       )}
+      style={{ aspectRatio: '16/9' }}
     >
-      <div
-        className={clsx('absolute inset-0 pointer-events-none transition-opacity duration-300', {
-          'opacity-0': !isReady || error,
-          'opacity-100': isReady && !error,
-        })}
-      >
+      {/* YouTube iframe — always rendered so it pre-loads */}
+      <div className="absolute inset-0 pointer-events-none">
         <div ref={containerRef} className="w-full h-full" />
       </div>
 
-      {/* Error Overlay */}
+      {/* Black curtain — covers YouTube branding/title when NOT scrubbing */}
+      <div
+        className="absolute inset-0 z-10 bg-black transition-opacity duration-300 pointer-events-none"
+        style={{ opacity: showCurtain ? 1 : 0 }}
+      />
+
+      {/* Error overlay */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-4 text-center z-20">
-          <svg className="w-12 h-12 text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="text-white text-lg font-semibold tracking-wide">Video Unavailable</p>
-          <p className="text-white/60 text-sm mt-1">{error}</p>
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black p-4 text-center">
+          <div className="text-4xl mb-3">🎬</div>
+          <p className="text-white font-semibold">Video Unavailable</p>
+          <p className="text-white/50 text-sm mt-1">{error}</p>
         </div>
       )}
 
-      {/* Loading / Buffering Overlay */}
+      {/* Loading spinner — shown on curtain */}
       {!error && showLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-10">
-          <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+        <div className="absolute inset-0 z-20 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Speed HUD */}
-      {!error && showRevealProgress && speedLabel && (
-        <div className="absolute top-2 right-2 z-10 pointer-events-none">
-          <div className="bg-black/80 backdrop-blur text-cyan-400 px-2 py-0.5 rounded text-xs font-mono font-bold border border-cyan-500/30">
-            {speedLabel} speed
+      {/* Speed badge — shown while scrubbing */}
+      {!error && isActive && (
+        <div className="absolute top-2 right-2 z-20 pointer-events-none">
+          <span className="bg-black/70 text-cyan-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-cyan-500/30">
+            {speedMult}× speed
+          </span>
+        </div>
+      )}
+
+      {/* Timer — shown while scrubbing */}
+      {!error && isActive && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="bg-black/70 text-white px-3 py-0.5 rounded-full text-xs font-mono border border-white/20">
+            <span className="text-cyan-400">{wallElapsed.toFixed(1)}</span>
+            <span className="text-white/40"> / {duration}s</span>
           </div>
         </div>
       )}
 
-      {/* Timer HUD */}
-      {!error && showRevealProgress && (
-        <div className="absolute top-2 left-0 w-full flex justify-center z-10 pointer-events-none">
-          <div className="bg-black/80 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-mono tracking-wider border border-white/20 shadow-lg">
-            <span className="text-cyan-400">{currentPlaybackTime.toFixed(1)}</span>
-            <span className="text-white/50"> / {duration.toFixed(0)}s</span>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom Progress Bar */}
-      {!error && (
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-white/10 z-10">
-          <div
-            className="h-full bg-cyan-400 transition-all duration-75 ease-linear"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-      )}
+      {/* Progress bar */}
+      <div className="absolute bottom-0 left-0 w-full h-1 bg-white/10 z-20">
+        <div
+          className="h-full bg-cyan-400"
+          style={{ width: `${progressPercent}%`, transition: 'width 0.1s linear' }}
+        />
+      </div>
     </div>
   )
 }
