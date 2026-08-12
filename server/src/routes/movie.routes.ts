@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { randomMovie, movieCount } from '../controllers/movie.controller'
+import { randomMovie, movieCount, movieTitles } from '../controllers/movie.controller'
 
 const router = Router()
 
@@ -16,5 +16,12 @@ router.get('/random', randomMovie)
  * @access Public
  */
 router.get('/count', movieCount)
+
+/**
+ * @route  GET /api/movies/titles
+ * @desc   Get all movie titles for autocomplete suggestions
+ * @access Public
+ */
+router.get('/titles', movieTitles)
 
 export default router

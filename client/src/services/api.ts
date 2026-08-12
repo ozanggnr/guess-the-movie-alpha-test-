@@ -52,6 +52,7 @@ export const healthApi = {
 export const moviesApi = {
   getRandom: () => apiClient.get<SafeMoviePayload>('/api/movies/random'),
   getCount: () => apiClient.get<MovieCountResponse>('/api/movies/count'),
+  getTitles: () => apiClient.get<{ titles: string[] }>('/api/movies/titles'),
 }
 
 // ─── Game ─────────────────────────────────────────────────────────────────────

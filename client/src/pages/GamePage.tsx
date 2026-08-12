@@ -1,45 +1,52 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { gameApi } from '@/services/api'
+import { gameApi, moviesApi } from '@/services/api'
 import { GameHeader } from '@/components/GameHeader'
 import { RoundIndicator } from '@/components/RoundIndicator'
 import { YouTubeTrailerPlayer } from '@/components/YouTubeTrailerPlayer'
-import { RevealProgress } from '@/components/RevealProgress'
 import { GuessInput } from '@/components/GuessInput'
 import { GameFeedback } from '@/components/GameFeedback'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Film } from 'lucide-react'
 import type { GameStartResponse } from '@/types'
 
 export default function GamePage() {
   const navigate = useNavigate()
-  
+
   // Game state
-  const [gameState, setGameState] = useState<GameStartResponse | null>(null)
+  const [gameState, setGameState] = useState<GameStartResponse & { trailerDuration: number | null } | null>(null)
   const [score, setScore] = useState<number>(0)
-  
+
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasPlayedCurrentRound, setHasPlayedCurrentRound] = useState(false)
-  
-  // Input state
+
+  // Input + guess state
   const [guess, setGuess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
+  const [revealedTitle, setRevealedTitle] = useState<string | null>(null)
+
+  // Autocomplete titles
+  const [movieTitles, setMovieTitles] = useState<string[]>([])
 
   // Initialization
   const [isInitializing, setIsInitializing] = useState(true)
   const [initError, setInitError] = useState<string | null>(null)
 
-  // 1. Start a new game on mount
+  // 1. Start a new game + fetch movie titles in parallel
   useEffect(() => {
     let mounted = true
-    const initGame = async () => {
+    const init = async () => {
       try {
-        const response = await gameApi.start()
+        const [gameRes, titlesRes] = await Promise.all([
+          gameApi.start(),
+          moviesApi.getTitles(),
+        ])
         if (mounted) {
-          setGameState(response.data)
-          setIsPlaying(true) // Autoplay the first round
+          setGameState(gameRes.data as any)
+          setMovieTitles((titlesRes.data as any).titles ?? [])
+          setIsPlaying(true)
         }
       } catch (err: any) {
         if (mounted) {
@@ -49,7 +56,7 @@ export default function GamePage() {
         if (mounted) setIsInitializing(false)
       }
     }
-    initGame()
+    init()
     return () => { mounted = false }
   }, [])
 
@@ -60,7 +67,6 @@ export default function GamePage() {
 
   const handleTrailerError = (error: unknown) => {
     console.error('Trailer error:', error)
-    // Could show a toast or alternative UI
   }
 
   const submitGuess = async () => {
@@ -73,42 +79,41 @@ export default function GamePage() {
       const data = response.data
 
       if (data.correct) {
-        // WIN
         setFeedback('correct')
         setScore(data.score)
         setTimeout(() => {
           navigate('/result', {
             state: { status: 'WON', score: data.score },
-            replace: true
+            replace: true,
           })
         }, 1500)
       } else if (data.status === 'LOST') {
-        // LOSS
         setFeedback('wrong')
+        setRevealedTitle(data.answer)
         setTimeout(() => {
           navigate('/result', {
             state: { status: 'LOST', score: 0, movieTitle: data.answer },
-            replace: true
+            replace: true,
           })
-        }, 2000)
+        }, 3000)
       } else {
-        // WRONG, NEXT ROUND
+        // Wrong but more rounds
         setFeedback('wrong')
         setTimeout(() => {
           setGuess('')
+          setFeedback(null)
+          setRevealedTitle(null)
           setHasPlayedCurrentRound(false)
           setGameState(prev => prev ? {
             ...prev,
             round: data.nextRound,
-            revealDuration: data.revealDuration
+            revealDuration: data.revealDuration,
           } : null)
-          // Automatically start the next trailer
           setIsPlaying(true)
         }, 1500)
       }
     } catch (err) {
       console.error('Guess submission failed', err)
-      // Toast notification would go here in a larger app
     } finally {
       setIsSubmitting(false)
     }
@@ -126,9 +131,7 @@ export default function GamePage() {
   if (initError) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-        <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4 text-red-400 text-2xl">
-          !
-        </div>
+        <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4 text-red-400 text-2xl">!</div>
         <h2 className="text-2xl font-bold mb-2">Failed to start game</h2>
         <p className="text-white/60 mb-6">{initError}</p>
         <button
@@ -143,20 +146,26 @@ export default function GamePage() {
 
   if (!gameState) return null
 
-  // The input is disabled if the trailer is currently playing, or if we are waiting for API
   const isInputDisabled = isPlaying || isSubmitting || feedback === 'correct'
+  const roundLabel = `Round ${gameState.round} · ${gameState.revealDuration}s reveal`
 
   return (
-    <div className="flex-1 flex flex-col pb-12 w-full max-w-5xl mx-auto px-4 overflow-hidden relative">
+    <div className="flex-1 flex flex-col w-full max-w-4xl mx-auto px-3 pb-4 overflow-hidden relative">
       <GameHeader score={score} />
-      
-      <main className="flex-1 flex flex-col items-center justify-center w-full mt-4">
-        <RoundIndicator currentRound={gameState.round} totalRounds={4} />
 
-        <div className="w-full max-w-3xl relative mt-4">
+      <main className="flex-1 flex flex-col items-center w-full gap-2 mt-1">
+        {/* Round + duration indicator row */}
+        <div className="flex items-center gap-3 w-full">
+          <RoundIndicator currentRound={gameState.round} totalRounds={4} />
+          <span className="text-white/40 text-xs font-mono ml-auto">{roundLabel}</span>
+        </div>
+
+        {/* Video player — compact 16:9 */}
+        <div className="w-full">
           <YouTubeTrailerPlayer
             videoId={gameState.trailerYoutubeId}
             duration={gameState.revealDuration}
+            trailerDuration={gameState.trailerDuration}
             isPlaying={isPlaying}
             onFinished={handleTrailerFinished}
             onError={handleTrailerError}
@@ -164,32 +173,53 @@ export default function GamePage() {
           />
         </div>
 
-        <div className="mt-8 h-12 flex items-center justify-center w-full">
+        {/* Status line below video */}
+        <div className="h-6 flex items-center justify-center w-full">
           <AnimatePresence mode="wait">
             {isPlaying ? (
-              <motion.div
-                key="progress"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+              <motion.span
+                key="watching"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-white/40 text-xs uppercase tracking-widest font-mono"
               >
-                <RevealProgress duration={gameState.revealDuration} />
-              </motion.div>
+                Playing at {(gameState.trailerDuration && gameState.trailerDuration > 0
+                  ? Math.min(gameState.trailerDuration / gameState.revealDuration, 16)
+                  : 1).toFixed(1)}× speed…
+              </motion.span>
             ) : hasPlayedCurrentRound ? (
-              <motion.div
-                key="instructions"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="text-white/60 font-medium tracking-wide uppercase text-sm"
+              <motion.span
+                key="guess"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-white/50 text-xs uppercase tracking-widest"
               >
-                Type your guess below
-              </motion.div>
+                Type your guess below ↓
+              </motion.span>
             ) : null}
           </AnimatePresence>
         </div>
 
-        <div className="w-full relative mt-4">
+        {/* Revealed movie title (after final wrong guess before redirect) */}
+        <AnimatePresence>
+          {revealedTitle && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 w-full"
+            >
+              <Film className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span className="text-white/60 text-sm">The movie was </span>
+              <span className="text-white font-bold text-sm">{revealedTitle}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Feedback + Guess input */}
+        <div className="w-full">
           <GameFeedback type={feedback} onClear={() => setFeedback(null)} />
           <GuessInput
             guess={guess}
@@ -198,6 +228,7 @@ export default function GamePage() {
             isDisabled={isInputDisabled}
             isLoading={isSubmitting}
             autoFocus={hasPlayedCurrentRound && !isPlaying}
+            suggestions={movieTitles}
           />
         </div>
       </main>

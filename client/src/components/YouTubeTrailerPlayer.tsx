@@ -5,7 +5,10 @@ import { twMerge } from 'tailwind-merge'
 
 interface YouTubeTrailerPlayerProps {
   videoId: string
+  /** The target reveal window in seconds (1, 3, 5, or 10) */
   duration: number
+  /** Full trailer length in seconds — used to compute playback speed */
+  trailerDuration: number | null
   isPlaying: boolean
   onFinished: () => void
   onError: (error: unknown) => void
@@ -15,6 +18,7 @@ interface YouTubeTrailerPlayerProps {
 export function YouTubeTrailerPlayer({
   videoId,
   duration,
+  trailerDuration,
   isPlaying,
   onFinished,
   onError,
@@ -29,6 +33,7 @@ export function YouTubeTrailerPlayer({
     pauseVideo,
     seekTo,
     getCurrentTime,
+    setPlaybackRate,
   } = useYouTubePlayer({
     videoId,
     onError,
@@ -37,29 +42,46 @@ export function YouTubeTrailerPlayer({
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0)
   const [hasStartedCurrentRound, setHasStartedCurrentRound] = useState(false)
   const rafRef = useRef<number | null>(null)
-  
+
   // Use refs for callbacks to avoid stale closures in RAF loop
   const latestDuration = useRef(duration)
   const latestOnFinished = useRef(onFinished)
-  
+
   useEffect(() => {
     latestDuration.current = duration
     latestOnFinished.current = onFinished
   }, [duration, onFinished])
 
-  // Precision timing loop
+  /**
+   * Compute playback rate so the ENTIRE trailer fits in `duration` seconds.
+   * Clamp between 0.25 and 16 (YouTube IFrame API limits).
+   */
+  const computedRate = trailerDuration && trailerDuration > 0
+    ? Math.min(Math.max(trailerDuration / duration, 0.25), 16)
+    : 1
+
+  // Apply playback rate whenever rate or readiness changes
+  useEffect(() => {
+    if (!isReady) return
+    setPlaybackRate(computedRate)
+  }, [isReady, computedRate, setPlaybackRate])
+
+  // Precision timing loop — tracks real elapsed time (wall-clock seconds)
+  // regardless of the playback rate set on the YouTube player.
   useEffect(() => {
     if (!isReady) return
 
     const tick = () => {
       const currentTime = getCurrentTime()
-      setCurrentPlaybackTime(currentTime)
+      // Wall-clock time elapsed = video position / playback rate
+      const wallClockElapsed = currentTime / computedRate
+      setCurrentPlaybackTime(wallClockElapsed)
 
-      if (currentTime >= latestDuration.current) {
+      if (wallClockElapsed >= latestDuration.current) {
         pauseVideo()
         latestOnFinished.current()
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        return // Stop the loop for this round
+        return
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -74,7 +96,7 @@ export function YouTubeTrailerPlayer({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [isPlaying, playerState, isReady, getCurrentTime, pauseVideo])
+  }, [isPlaying, playerState, isReady, getCurrentTime, pauseVideo, computedRate])
 
   // Handle play/pause commands from parent
   useEffect(() => {
@@ -82,21 +104,22 @@ export function YouTubeTrailerPlayer({
 
     if (isPlaying) {
       if (!hasStartedCurrentRound) {
-        // Only seek to 0 when we initially start the round
         seekTo(0, true)
         setHasStartedCurrentRound(true)
+        // Re-apply rate after seek (some browsers reset it)
+        setPlaybackRate(computedRate)
       }
       playVideo()
     } else {
       pauseVideo()
-      setHasStartedCurrentRound(false) // Reset for next time isPlaying becomes true
+      setHasStartedCurrentRound(false)
     }
-  }, [isPlaying, isReady, playVideo, pauseVideo, seekTo, hasStartedCurrentRound])
+  }, [isPlaying, isReady, playVideo, pauseVideo, seekTo, hasStartedCurrentRound, computedRate, setPlaybackRate])
 
-  // Derived UI states
   const showLoading = !isReady || (isPlaying && playerState === 'BUFFERING')
   const showRevealProgress = isPlaying && playerState === 'PLAYING'
   const progressPercent = Math.min((currentPlaybackTime / duration) * 100, 100)
+  const speedLabel = computedRate > 1 ? `${computedRate.toFixed(1)}×` : null
 
   return (
     <div
@@ -105,10 +128,6 @@ export function YouTubeTrailerPlayer({
         className
       )}
     >
-      {/* 
-        The YouTube iframe container. 
-        pointer-events-none prevents user interaction (pausing, seeking, clicking external links).
-      */}
       <div
         className={clsx('absolute inset-0 pointer-events-none transition-opacity duration-300', {
           'opacity-0': !isReady || error,
@@ -136,19 +155,29 @@ export function YouTubeTrailerPlayer({
         </div>
       )}
 
-      {/* Reveal Progress HUD (Only shown while actually playing) */}
+      {/* Speed HUD */}
+      {!error && showRevealProgress && speedLabel && (
+        <div className="absolute top-2 right-2 z-10 pointer-events-none">
+          <div className="bg-black/80 backdrop-blur text-cyan-400 px-2 py-0.5 rounded text-xs font-mono font-bold border border-cyan-500/30">
+            {speedLabel} speed
+          </div>
+        </div>
+      )}
+
+      {/* Timer HUD */}
       {!error && showRevealProgress && (
-        <div className="absolute top-4 left-0 w-full flex justify-center z-10 pointer-events-none">
-          <div className="bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-mono tracking-wider border border-white/20 shadow-lg">
-            Trailer Reveal <span className="text-cyan-400">{currentPlaybackTime.toFixed(1)}</span> / {duration.toFixed(1)}s
+        <div className="absolute top-2 left-0 w-full flex justify-center z-10 pointer-events-none">
+          <div className="bg-black/80 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-mono tracking-wider border border-white/20 shadow-lg">
+            <span className="text-cyan-400">{currentPlaybackTime.toFixed(1)}</span>
+            <span className="text-white/50"> / {duration.toFixed(0)}s</span>
           </div>
         </div>
       )}
 
       {/* Bottom Progress Bar */}
       {!error && (
-        <div className="absolute bottom-0 left-0 w-full h-1.5 bg-white/10 z-10">
-          <div 
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-white/10 z-10">
+          <div
             className="h-full bg-cyan-400 transition-all duration-75 ease-linear"
             style={{ width: `${progressPercent}%` }}
           />

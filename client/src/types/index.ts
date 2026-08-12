@@ -110,6 +110,7 @@ export interface MovieCountResponse {
 export interface GameStartResponse {
   gameId: string
   trailerYoutubeId: string
+  trailerDuration: number | null
   round: number
   revealDuration: number
 }

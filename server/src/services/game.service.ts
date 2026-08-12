@@ -1,6 +1,6 @@
 import { GameStatus, RoundResult } from '@prisma/client'
 import prisma from '../config/database'
-import { getRandomMovie } from './movie.service'
+import { getRandomMovie, getTrailerDuration } from './movie.service'
 import { isCorrectGuess, validateGuess } from '../utils/normalizeGuess'
 import {
   NotFoundError,
@@ -41,6 +41,7 @@ export const GAME_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
 export interface StartGameResponse {
   gameId: string
   trailerYoutubeId: string
+  trailerDuration: number | null // full trailer duration in seconds for playback speed calc
   round: number
   revealDuration: number
 }
@@ -98,9 +99,12 @@ export async function startGame(): Promise<StartGameResponse> {
     select: { id: true },
   })
 
+  const trailerDuration = await getTrailerDuration(movie.trailerYoutubeId)
+
   return {
     gameId: game.id,
     trailerYoutubeId: movie.trailerYoutubeId,
+    trailerDuration,
     round: 1,
     revealDuration: ROUND_DURATIONS[1],
   }

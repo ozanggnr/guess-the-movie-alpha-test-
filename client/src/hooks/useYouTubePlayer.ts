@@ -166,6 +166,12 @@ export function useYouTubePlayer({ videoId, onError }: UseYouTubePlayerProps) {
     return 0
   }, [])
 
+  const setPlaybackRate = useCallback((rate: number) => {
+    if (playerRef.current && typeof playerRef.current.setPlaybackRate === 'function') {
+      playerRef.current.setPlaybackRate(rate)
+    }
+  }, [])
+
   return {
     containerRef,
     isReady,
@@ -175,5 +181,6 @@ export function useYouTubePlayer({ videoId, onError }: UseYouTubePlayerProps) {
     pauseVideo,
     seekTo,
     getCurrentTime,
+    setPlaybackRate,
   }
 }

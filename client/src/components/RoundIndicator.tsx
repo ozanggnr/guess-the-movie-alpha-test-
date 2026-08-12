@@ -10,7 +10,7 @@ export function RoundIndicator({ currentRound, totalRounds }: RoundIndicatorProp
   const rounds = Array.from({ length: totalRounds }, (_, i) => i + 1)
 
   return (
-    <div className="flex items-center justify-center space-x-2 my-6">
+    <div className="flex items-center justify-center space-x-2 my-1">
       {rounds.map((round) => {
         const isActive = round === currentRound
         const isPast = round < currentRound

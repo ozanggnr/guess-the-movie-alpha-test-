@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import { getRandomMovie, countAvailableMovies } from '../services/movie.service'
+import { getRandomMovie, countAvailableMovies, getMovieTitles } from '../services/movie.service'
 
 /**
  * GET /api/movies/random
@@ -36,11 +36,24 @@ export async function randomMovie(
 }
 
 /**
- * GET /api/movies/count
+ * GET /api/movies/titles
  *
- * Returns the count of available (trailer-ready) movies.
- * Useful for health checks and admin dashboards.
+ * Returns all movie titles for the autocomplete dropdown.
+ * Safe to expose — used only for client-side suggestions.
  */
+export async function movieTitles(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const titles = await getMovieTitles()
+    res.status(200).json({ titles })
+  } catch (err) {
+    next(err)
+  }
+}
+
 export async function movieCount(
   _req: Request,
   res: Response,

@@ -6,7 +6,7 @@ interface GameHeaderProps {
 
 export function GameHeader({ score }: GameHeaderProps) {
   return (
-    <header className="w-full flex items-center justify-between py-6 px-4 max-w-6xl mx-auto">
+    <header className="w-full flex items-center justify-between py-2 px-4 max-w-6xl mx-auto">
       <div className="flex items-center space-x-2">
         <div className="w-8 h-8 rounded bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
           <span className="font-bold text-black text-lg">M</span>

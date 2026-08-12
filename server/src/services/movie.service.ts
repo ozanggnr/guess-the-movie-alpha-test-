@@ -92,3 +92,28 @@ export async function listMovies(page = 1, perPage = 20) {
 export async function countAvailableMovies(): Promise<number> {
   return prisma.movie.count({ where: { isTrailerAvailable: true } })
 }
+
+/**
+ * Get all movie titles (for autocomplete).
+ * Safe to expose — titles are only used for the guess input dropdown.
+ * Note: this is intentionally a flat list of strings, not full movie objects.
+ */
+export async function getMovieTitles(): Promise<string[]> {
+  const movies = await prisma.movie.findMany({
+    where: { isTrailerAvailable: true },
+    select: { title: true },
+    orderBy: { title: 'asc' },
+  })
+  return movies.map(m => m.title)
+}
+
+/**
+ * Get full trailer duration for a movie by its YouTube ID.
+ */
+export async function getTrailerDuration(trailerYoutubeId: string): Promise<number | null> {
+  const movie = await prisma.movie.findFirst({
+    where: { trailerYoutubeId },
+    select: { trailerDuration: true },
+  })
+  return movie?.trailerDuration ?? null
+}
