@@ -31,6 +31,7 @@ export interface Movie {
 export interface SafeMoviePayload {
   movieId: string
   trailerYoutubeId: string
+  videoUrl?: string | null
 }
 
 // ─── Game ─────────────────────────────────────────────────────────────────────
@@ -110,6 +111,7 @@ export interface MovieCountResponse {
 export interface GameStartResponse {
   gameId: string
   trailerYoutubeId: string
+  videoUrl?: string | null
   trailerDuration: number | null
   round: number
   revealDuration: number

@@ -27,7 +27,7 @@ enum RoundResult {
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
-/// A movie stored in the database, including its trailer metadata.
+/// A movie stored in the database, including its video metadata.
 model Movie {
   id                  String   @id @default(cuid())
   imdbId              String?  @unique
@@ -37,6 +37,7 @@ model Movie {
   overview            String?
   posterUrl           String?
   genres              String[]
+  videoUrl            String?  // Direct MP4 video stream URL for guaranteed 0-adblock playback
   trailerYoutubeId    String?  @unique
   trailerTitle        String?
   trailerChannel      String?

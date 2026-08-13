@@ -41,6 +41,7 @@ export const GAME_TTL_MS = 2 * 60 * 60 * 1000 // 2 hours
 export interface StartGameResponse {
   gameId: string
   trailerYoutubeId: string
+  videoUrl?: string | null
   trailerDuration: number | null // full trailer duration in seconds for playback speed calc
   round: number
   revealDuration: number
@@ -104,6 +105,7 @@ export async function startGame(): Promise<StartGameResponse> {
   return {
     gameId: game.id,
     trailerYoutubeId: movie.trailerYoutubeId,
+    videoUrl: movie.videoUrl || null,
     trailerDuration,
     round: 1,
     revealDuration: ROUND_DURATIONS[1],

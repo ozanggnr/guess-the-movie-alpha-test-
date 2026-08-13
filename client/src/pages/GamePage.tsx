@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { gameApi, moviesApi } from '@/services/api'
 import { GameHeader } from '@/components/GameHeader'
 import { RoundIndicator } from '@/components/RoundIndicator'
-import { YouTubeTrailerPlayer } from '@/components/YouTubeTrailerPlayer'
+import { UniversalVideoPlayer } from '@/components/UniversalVideoPlayer'
 import { GuessInput } from '@/components/GuessInput'
 import { GameFeedback } from '@/components/GameFeedback'
 import { useLanguage } from '@/context/LanguageContext'
@@ -200,8 +200,9 @@ export default function GamePage() {
 
         {/* Video clip player */}
         <div className="w-full">
-          <YouTubeTrailerPlayer
+          <UniversalVideoPlayer
             videoId={gameState.trailerYoutubeId}
+            videoUrl={gameState.videoUrl}
             duration={gameState.revealDuration}
             trailerDuration={gameState.trailerDuration}
             isPlaying={isPlaying}

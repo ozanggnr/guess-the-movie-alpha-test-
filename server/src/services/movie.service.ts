@@ -9,28 +9,24 @@ import prisma from '../config/database'
 export interface SafeMoviePayload {
   movieId: string
   trailerYoutubeId: string
+  videoUrl?: string | null
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /**
- * Select a random movie that has a trailer available.
- *
- * Uses PostgreSQL's RANDOM() via a raw query for true randomness at scale.
- * Falls back to a count+offset approach for compatibility.
+ * Select a random movie that has a trailer/video available.
  *
  * Returns only the fields safe to expose to the frontend.
  * The movie's title, imdbId, and overview are NEVER returned.
  */
 export async function getRandomMovie(): Promise<SafeMoviePayload | null> {
-  // Count available movies
   const count = await prisma.movie.count({
     where: { isTrailerAvailable: true },
   })
 
   if (count === 0) return null
 
-  // Pick a random offset
   const skip = Math.floor(Math.random() * count)
 
   const movie = await prisma.movie.findFirst({
@@ -39,28 +35,28 @@ export async function getRandomMovie(): Promise<SafeMoviePayload | null> {
     select: {
       id: true,
       trailerYoutubeId: true,
-      // Explicitly NOT selecting: title, imdbId, overview, originalTitle
+      videoUrl: true,
     },
   })
 
-  if (!movie || !movie.trailerYoutubeId) return null
+  if (!movie || (!movie.trailerYoutubeId && !movie.videoUrl)) return null
 
   return {
     movieId: movie.id,
-    trailerYoutubeId: movie.trailerYoutubeId,
+    trailerYoutubeId: movie.trailerYoutubeId || '',
+    videoUrl: movie.videoUrl || null,
   }
 }
 
 /**
- * Retrieve full movie details — for internal use only (never expose to frontend
- * during an active game).
+ * Retrieve full movie details — for internal use only.
  */
 export async function getMovieById(id: string) {
   return prisma.movie.findUnique({ where: { id } })
 }
 
 /**
- * List all movies (admin/seed verification use only).
+ * List all movies.
  */
 export async function listMovies(page = 1, perPage = 20) {
   const skip = (page - 1) * perPage
@@ -75,6 +71,7 @@ export async function listMovies(page = 1, perPage = 20) {
         year: true,
         genres: true,
         isTrailerAvailable: true,
+        videoUrl: true,
         trailerYoutubeId: true,
         trailerChannel: true,
         trailerDuration: true,
@@ -87,7 +84,7 @@ export async function listMovies(page = 1, perPage = 20) {
 }
 
 /**
- * Count available (trailer-ready) movies.
+ * Count available movies.
  */
 export async function countAvailableMovies(): Promise<number> {
   return prisma.movie.count({ where: { isTrailerAvailable: true } })
@@ -95,8 +92,6 @@ export async function countAvailableMovies(): Promise<number> {
 
 /**
  * Get all movie titles (for autocomplete).
- * Safe to expose — titles are only used for the guess input dropdown.
- * Note: this is intentionally a flat list of strings, not full movie objects.
  */
 export async function getMovieTitles(): Promise<string[]> {
   const movies = await prisma.movie.findMany({
@@ -108,11 +103,11 @@ export async function getMovieTitles(): Promise<string[]> {
 }
 
 /**
- * Get full trailer duration for a movie by its YouTube ID.
+ * Get full duration for a movie.
  */
 export async function getTrailerDuration(trailerYoutubeId: string): Promise<number | null> {
   const movie = await prisma.movie.findFirst({
-    where: { trailerYoutubeId },
+    where: { OR: [{ trailerYoutubeId }, { id: trailerYoutubeId }] },
     select: { trailerDuration: true },
   })
   return movie?.trailerDuration ?? null
