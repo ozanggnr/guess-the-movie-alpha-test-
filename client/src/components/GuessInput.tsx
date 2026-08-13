@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Send, Loader2 } from 'lucide-react'
+import { useLanguage } from '@/context/LanguageContext'
 import { clsx } from 'clsx'
 
 interface GuessInputProps {
@@ -21,6 +22,7 @@ export function GuessInput({
   autoFocus = false,
   suggestions = [],
 }: GuessInputProps) {
+  const { t } = useLanguage()
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [showDropdown, setShowDropdown] = useState(false)
@@ -55,7 +57,7 @@ export function GuessInput({
     }
   }, [filtered.length, isDisabled, guess]) // eslint-disable-line
 
-  // Auto-focus after trailer finishes
+  // Auto-focus after video finishes
   useEffect(() => {
     if (autoFocus && !isDisabled && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 80)
@@ -89,7 +91,6 @@ export function GuessInput({
     setGuess(title)
     setShowDropdown(false)
     setActiveIndex(-1)
-    // Pass title DIRECTLY to bypass stale React state — state may not update before onSubmit fires
     onSubmit(title)
   }
 
@@ -124,12 +125,12 @@ export function GuessInput({
             }
           }}
           disabled={isDisabled || isLoading}
-          placeholder={isDisabled ? 'Watch the trailer first…' : 'Type a movie title…'}
+          placeholder={isDisabled ? t('watchClipFirst') : t('typeMoviePlaceholder')}
           autoComplete="off"
           className={clsx(
-            'w-full bg-black/60 border-2 rounded-xl py-3 pl-4 pr-12 text-base text-white placeholder-white/30 outline-none transition-all duration-200',
+            'w-full bg-black/70 border-2 rounded-2xl py-3.5 pl-4 pr-14 text-base text-white placeholder-white/30 outline-none transition-all duration-200 shadow-inner',
             {
-              'border-cyan-500/60 focus:border-cyan-400 focus:shadow-[0_0_20px_rgba(34,211,238,0.15)]': !isDisabled,
+              'border-gold-500/50 focus:border-gold-400 focus:shadow-[0_0_20px_rgba(245,158,11,0.2)]': !isDisabled,
               'border-white/10 opacity-50 cursor-not-allowed': isDisabled || isLoading,
             }
           )}
@@ -138,32 +139,32 @@ export function GuessInput({
           onClick={() => onSubmit(undefined)}
           disabled={isSubmitDisabled}
           className={clsx(
-            'absolute right-2 top-2 bottom-2 aspect-square flex items-center justify-center rounded-lg transition-all duration-200',
+            'absolute right-2 top-2 bottom-2 aspect-square flex items-center justify-center rounded-xl font-bold transition-all duration-200',
             {
-              'bg-cyan-500 hover:bg-cyan-400 text-black hover:scale-105 active:scale-95': !isSubmitDisabled,
+              'bg-gradient-gold text-cinema-950 hover:scale-105 active:scale-95 shadow-gold-sm': !isSubmitDisabled,
               'bg-white/10 text-white/20 cursor-not-allowed': isSubmitDisabled,
             }
           )}
-          aria-label="Submit Guess"
+          aria-label={t('submitGuess')}
         >
-          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
+          {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
         </button>
       </div>
 
-      {/* Dropdown rendered via portal-style fixed positioning — never clipped */}
+      {/* Dropdown rendered via fixed portal positioning */}
       {showDropdown && filtered.length > 0 && (
         <div style={dropdownStyle}>
-          <ul className="bg-[#0d0f14] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+          <ul className="bg-[#0e1117] border border-gold-500/20 rounded-2xl shadow-2xl overflow-hidden py-1">
             {filtered.map((title, i) => (
               <li
                 key={title}
                 onMouseDown={e => { e.preventDefault(); selectSuggestion(title) }}
                 className={clsx(
                   'px-4 py-2.5 text-sm cursor-pointer flex items-center gap-2 transition-colors',
-                  i === activeIndex ? 'bg-cyan-500/20 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                  i === activeIndex ? 'bg-gold-500/20 text-gold-300 font-semibold' : 'text-white/80 hover:bg-white/5 hover:text-white'
                 )}
               >
-                <span className="text-white/20 text-xs font-mono w-3 shrink-0">{i + 1}</span>
+                <span className="text-white/30 text-xs font-mono w-4 shrink-0">{i + 1}</span>
                 {highlightMatch(title, guess)}
               </li>
             ))}
@@ -181,7 +182,7 @@ function highlightMatch(title: string, query: string) {
   return (
     <>
       {title.slice(0, idx)}
-      <span className="text-cyan-400 font-semibold">{title.slice(idx, idx + query.length)}</span>
+      <span className="text-gold-400 font-bold">{title.slice(idx, idx + query.length)}</span>
       {title.slice(idx + query.length)}
     </>
   )

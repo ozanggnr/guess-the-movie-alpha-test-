@@ -1,4 +1,5 @@
 import { cn } from '@/utils/cn'
+import { useLanguage } from '@/context/LanguageContext'
 
 interface LogoProps {
   className?: string
@@ -13,17 +14,18 @@ const sizeMap = {
 }
 
 export default function Logo({ className, size = 'md', showTagline = false }: LogoProps) {
+  const { t } = useLanguage()
   const s = sizeMap[size]
 
   return (
-    <div className={cn('flex items-center gap-3', className)}>
+    <div className={cn('flex items-center gap-3 select-none', className)}>
       {/* Film reel icon */}
       <div className={cn('relative', s.icon)}>
         <span
-          className="inline-block"
+          className="inline-block hover:scale-110 transition-transform duration-200"
           role="img"
           aria-label="film reel"
-          style={{ filter: 'drop-shadow(0 0 8px rgba(245,158,11,0.6))' }}
+          style={{ filter: 'drop-shadow(0 0 10px rgba(245,158,11,0.6))' }}
         >
           🎬
         </span>
@@ -33,11 +35,11 @@ export default function Logo({ className, size = 'md', showTagline = false }: Lo
         <span
           className={cn('font-black tracking-tight leading-none text-shimmer', s.title)}
         >
-          MovieGuess
+          {t('brandName')}
         </span>
         {showTagline && (
           <span className={cn('text-white/40 font-medium tracking-widest uppercase mt-1', s.tagline)}>
-            Can you name the film?
+            {t('tagline')}
           </span>
         )}
       </div>

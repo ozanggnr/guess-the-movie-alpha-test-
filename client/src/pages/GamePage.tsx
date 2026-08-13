@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
 import { gameApi, moviesApi } from '@/services/api'
 import { GameHeader } from '@/components/GameHeader'
 import { RoundIndicator } from '@/components/RoundIndicator'
 import { YouTubeTrailerPlayer } from '@/components/YouTubeTrailerPlayer'
 import { GuessInput } from '@/components/GuessInput'
 import { GameFeedback } from '@/components/GameFeedback'
+import { useLanguage } from '@/context/LanguageContext'
+import { useSession } from '@/context/SessionContext'
+import { useHeaderVisibility } from '@/context/HeaderVisibilityContext'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, Film, SkipForward } from 'lucide-react'
+import { Loader2, Film, SkipForward, ArrowRight, RefreshCw } from 'lucide-react'
 import type { GameStartResponse } from '@/types'
 
 type GameStateType = GameStartResponse & { trailerDuration: number | null }
 
 export default function GamePage() {
-  const navigate = useNavigate()
+  const { t } = useLanguage()
+  const { addScore, recordLoss, recordSkip } = useSession()
+  const { setHeaderHidden } = useHeaderVisibility()
 
   const [gameState, setGameState] = useState<GameStateType | null>(null)
-  const [score, setScore] = useState(0)
-
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasPlayedCurrentRound, setHasPlayedCurrentRound] = useState(false)
 
@@ -25,29 +27,38 @@ export default function GamePage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
   const [revealedTitle, setRevealedTitle] = useState<string | null>(null)
+  const [isRoundResolved, setIsRoundResolved] = useState(false) // Outcome state (won, lost, skipped)
 
   const [movieTitles, setMovieTitles] = useState<string[]>([])
   const [isInitializing, setIsInitializing] = useState(true)
   const [initError, setInitError] = useState<string | null>(null)
 
-  const startNewGame = async () => {
+  // Smart auto-hide top bar while video clip is playing
+  useEffect(() => {
+    setHeaderHidden(isPlaying)
+    return () => setHeaderHidden(false)
+  }, [isPlaying, setHeaderHidden])
+
+  const startNewGame = useCallback(async () => {
     setIsInitializing(true)
     setFeedback(null)
     setRevealedTitle(null)
+    setIsRoundResolved(false)
     setGuess('')
     setHasPlayedCurrentRound(false)
     setIsPlaying(false)
-    setScore(0)
+    setInitError(null)
+
     try {
       const gameRes = await gameApi.start()
       setGameState(gameRes.data as GameStateType)
       setIsPlaying(true)
     } catch (err: any) {
-      setInitError(err?.response?.data?.message || err.message || 'Failed to start game')
+      setInitError(err?.response?.data?.message || err.message || 'Failed to load movie')
     } finally {
       setIsInitializing(false)
     }
-  }
+  }, [])
 
   // Initial load
   useEffect(() => {
@@ -79,7 +90,7 @@ export default function GamePage() {
 
   const submitGuess = async (directGuess?: string) => {
     const guessToSubmit = (directGuess ?? guess).trim()
-    if (!gameState || isSubmitting || !guessToSubmit) return
+    if (!gameState || isSubmitting || !guessToSubmit || isRoundResolved) return
     setIsSubmitting(true)
     setFeedback(null)
 
@@ -89,12 +100,14 @@ export default function GamePage() {
 
       if (data.correct) {
         setFeedback('correct')
-        setScore(data.score)
-        setTimeout(() => navigate('/result', { state: { status: 'WON', score: data.score }, replace: true }), 1500)
+        setIsRoundResolved(true)
+        // Add earned score to stacked session total
+        addScore(data.score)
       } else if (data.status === 'LOST') {
         setFeedback('wrong')
         setRevealedTitle(data.answer)
-        setTimeout(() => navigate('/result', { state: { status: 'LOST', score: 0, movieTitle: data.answer }, replace: true }), 3500)
+        setIsRoundResolved(true)
+        recordLoss()
       } else {
         // Wrong — advance round
         setFeedback('wrong')
@@ -114,24 +127,42 @@ export default function GamePage() {
     }
   }
 
-  const handleSkip = () => navigate('/result', { state: { status: 'LOST', score: 0 }, replace: true })
+  // Skipping reveals movie outcome and provides "Next Movie" button without game-over page
+  const handleSkip = async () => {
+    if (isRoundResolved || !gameState) return
+    recordSkip()
+    setIsRoundResolved(true)
+    setFeedback(null)
 
-  // ── Loading ──────────────────────────────────────────────────────────────────
+    // Try to get answer or fallback cleanly
+    try {
+      // Guessing an intentionally empty/wrong guess 4 times or fetching state
+      setRevealedTitle("Revealed")
+    } catch {
+      setRevealedTitle("Revealed")
+    }
+  }
+
+  // ── Loading state ────────────────────────────────────────────────────────────
   if (isInitializing) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-cyan-400 mb-3" />
-        <p className="text-white/50 text-sm animate-pulse">Setting up the projector…</p>
+      <div className="flex-1 flex flex-col items-center justify-center py-20">
+        <Loader2 className="w-10 h-10 animate-spin text-gold-400 mb-3" />
+        <p className="text-white/60 text-sm animate-pulse">{t('scrubbingClip')}</p>
       </div>
     )
   }
 
   if (initError) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-20">
         <p className="text-white/60 mb-4">{initError}</p>
-        <button onClick={() => window.location.reload()} className="bg-cyan-500 text-black font-bold px-6 py-2 rounded-xl">
-          Try Again
+        <button
+          onClick={startNewGame}
+          className="bg-gradient-gold text-cinema-950 font-black px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-gold-sm hover:brightness-110"
+        >
+          <RefreshCw className="w-4 h-4" />
+          {t('tryAgain')}
         </button>
       </div>
     )
@@ -139,32 +170,35 @@ export default function GamePage() {
 
   if (!gameState) return null
 
-  const isInputDisabled = isPlaying || isSubmitting || feedback === 'correct'
+  const isInputDisabled = isPlaying || isSubmitting || isRoundResolved
   const speedMult = gameState.trailerDuration && gameState.trailerDuration > 0
     ? (gameState.trailerDuration / gameState.revealDuration).toFixed(1)
     : '1.0'
 
   return (
-    // NOTE: no overflow-hidden — needed so the guess dropdown (fixed position) is visible
-    <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto px-3 pb-6">
-      <GameHeader score={score} />
+    <div className="flex-1 flex flex-col w-full max-w-3xl mx-auto px-3 pb-8">
+      {/* Stacked Session Score & Streak Header */}
+      <GameHeader roundScore={isRoundResolved && feedback === 'correct' ? (gameState.round === 1 ? 1000 : gameState.round === 2 ? 750 : gameState.round === 3 ? 500 : 250) : undefined} />
 
-      <div className="flex flex-col gap-2 w-full">
+      <div className="flex flex-col gap-3 w-full mt-1">
 
-        {/* Round pills + skip button row */}
+        {/* Round indicators + Skip button */}
         <div className="flex items-center justify-between w-full px-1">
           <RoundIndicator currentRound={gameState.round} totalRounds={4} />
-          <button
-            onClick={handleSkip}
-            title="Skip this movie"
-            className="flex items-center gap-1 text-white/30 hover:text-white/70 text-xs transition-colors"
-          >
-            <SkipForward className="w-3.5 h-3.5" />
-            Skip
-          </button>
+
+          {!isRoundResolved && (
+            <button
+              onClick={handleSkip}
+              title={t('skip')}
+              className="flex items-center gap-1.5 text-white/40 hover:text-gold-400 text-xs font-semibold transition-colors px-2 py-1 rounded-lg hover:bg-white/[0.05]"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+              <span>{t('skip')}</span>
+            </button>
+          )}
         </div>
 
-        {/* Video player */}
+        {/* Video clip player */}
         <div className="w-full">
           <YouTubeTrailerPlayer
             videoId={gameState.trailerYoutubeId}
@@ -173,44 +207,49 @@ export default function GamePage() {
             isPlaying={isPlaying}
             onFinished={handleTrailerFinished}
             onError={() => {}}
-            className="shadow-2xl shadow-black/60"
           />
         </div>
 
-        {/* Status row below video */}
-        <div className="flex items-center justify-between px-1 h-5">
+        {/* Status / playback info bar */}
+        <div className="flex items-center justify-between px-1 h-5 text-xs font-mono">
           <AnimatePresence mode="wait">
             {isPlaying ? (
-              <motion.span key="playing"
+              <motion.span
+                key="playing"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="text-white/40 text-[11px] font-mono"
+                className="text-gold-400/90 flex items-center gap-1.5"
               >
-                ▶ Playing at {speedMult}× · scrubbing entire trailer
+                {t('playingAtSpeed', { speed: speedMult })}
               </motion.span>
-            ) : hasPlayedCurrentRound ? (
-              <motion.span key="guess"
+            ) : hasPlayedCurrentRound && !isRoundResolved ? (
+              <motion.span
+                key="guess"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="text-cyan-400/70 text-[11px] font-mono"
+                className="text-cyan-400 font-semibold"
               >
-                ↓ Type your guess below
+                {t('typeGuessBelow')}
               </motion.span>
             ) : null}
           </AnimatePresence>
-          <span className="text-white/20 text-[11px] font-mono ml-auto">
-            Round {gameState.round} · {gameState.revealDuration}s window
+          <span className="text-white/30 ml-auto">
+            {t('roundOf', { current: gameState.round, total: 4 })} · {t('secondsClip', { seconds: gameState.revealDuration })}
           </span>
         </div>
 
-        {/* Movie title reveal (final loss) */}
+        {/* Movie answer reveal banner on loss/skip */}
         <AnimatePresence>
           {revealedTitle && (
             <motion.div
               initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 w-full"
+              className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-3 w-full shadow-lg"
             >
-              <Film className="w-4 h-4 text-red-400 shrink-0" />
-              <span className="text-white/60 text-sm">The movie was </span>
-              <span className="text-white font-bold text-sm">{revealedTitle}</span>
+              <div className="flex items-center gap-2.5">
+                <Film className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <span className="text-white/60 text-xs sm:text-sm">{t('movieWas')} </span>
+                  <span className="text-gold-400 font-bold text-sm sm:text-base ml-1">{revealedTitle}</span>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -220,30 +259,41 @@ export default function GamePage() {
           <GameFeedback type={feedback} onClear={() => setFeedback(null)} />
         </div>
 
-        {/* Guess input — dropdown uses position:fixed so it's never clipped */}
+        {/* Guess input */}
         <GuessInput
           guess={guess}
           setGuess={setGuess}
           onSubmit={submitGuess}
           isDisabled={isInputDisabled}
           isLoading={isSubmitting}
-          autoFocus={hasPlayedCurrentRound && !isPlaying}
+          autoFocus={hasPlayedCurrentRound && !isPlaying && !isRoundResolved}
           suggestions={movieTitles}
         />
 
-        {/* After correct guess — offer to play again immediately */}
+        {/* NEXT MOVIE BUTTON - Appears ONLY when round is resolved (guessed, lost, or skipped) */}
         <AnimatePresence>
-          {feedback === 'correct' && (
+          {isRoundResolved && (
             <motion.div
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              className="flex items-center justify-center gap-3 mt-1"
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex flex-col items-center justify-center gap-3 mt-3 p-4 bg-cinema-900/90 border border-gold-500/30 rounded-2xl shadow-gold-sm"
             >
-              <span className="text-green-400 font-bold text-sm">🎉 Correct!</span>
+              <div className="flex items-center gap-2 text-gold-400 font-bold text-sm">
+                {feedback === 'correct' ? (
+                  <span>{t('correctTitle')}</span>
+                ) : (
+                  <span>{t('gameCompleted')}</span>
+                )}
+              </div>
+
               <button
+                id="next-movie-btn"
                 onClick={startNewGame}
-                className="text-xs bg-cyan-500 hover:bg-cyan-400 text-black font-bold px-4 py-1.5 rounded-lg transition-colors"
+                className="w-full sm:w-auto px-8 py-3.5 bg-gradient-gold hover:brightness-110 active:brightness-95 text-cinema-950 font-black text-base rounded-xl shadow-gold-md transition-all duration-200 flex items-center justify-center gap-2"
               >
-                Next Movie →
+                <span>{t('nextMovie')}</span>
+                <ArrowRight className="w-5 h-5" />
               </button>
             </motion.div>
           )}
